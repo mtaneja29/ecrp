@@ -113,3 +113,8 @@ interactive docs are also available at:
 
 The churn model (feature set, preprocessing, model selection, metrics, and serving) is
 documented in full in [docs/MODEL.md](docs/MODEL.md).
+
+## Roadmap
+
+Planned integrations (LLM-assisted retention workflow, model retraining, security, cloud
+deployment) are described in [docs/ROADMAP.md](docs/ROADMAP.md).
