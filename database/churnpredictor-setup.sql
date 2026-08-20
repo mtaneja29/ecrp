@@ -1,4 +1,4 @@
--- ChurnPredictor one-time setup: project user + database + tables.
+-- ECRP (Engage Customer Retention Platform) one-time setup: project user + database + tables.
 -- HOW TO RUN:
 --   1. Open this file in MySQL Workbench using your ROOT connection
 --   2. Change pick_a_password below to a password you choose

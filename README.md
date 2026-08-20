@@ -1,4 +1,4 @@
-# ChurnPredictor
+# Engage Customer Retention Platform (ECRP)
 
 A churn prediction and retention platform for telecom companies. A company uploads its
 customer data, a machine-learning model scores every customer's churn risk, and a dashboard

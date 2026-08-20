@@ -6,7 +6,7 @@ import pandas as pd
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="ChurnPredictor ML Service")
+app = FastAPI(title="ECRP ML Service")
 
 # loaded once at startup, not per request
 model = joblib.load("churn_model.joblib")

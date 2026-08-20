@@ -1,6 +1,7 @@
-# ChurnPredictor — Model Documentation
+# ECRP — Model Documentation
 
-Reference documentation for the machine-learning model behind ChurnPredictor, a telecom
+Reference documentation for the machine-learning model behind the Engage Customer Retention
+Platform (ECRP), a telecom
 churn-prediction platform. This describes the model as it currently exists: the data it was
 trained on, how it is built, how it was selected, how it performs, and how it is served.
 

@@ -1,4 +1,4 @@
-# ChurnPredictor — REST API
+# ECRP — REST API
 
 The Spring Boot application exposes a JSON REST API alongside its web UI. This is the
 machine-facing interface (external systems, scripts); the Thymeleaf pages are the

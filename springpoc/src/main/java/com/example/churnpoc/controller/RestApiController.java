@@ -36,8 +36,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
  */
 @RestController
 @RequestMapping("/api")
-@Tag(name = "ChurnPredictor API", description = "Customer churn scoring and retention workflow")
-@OpenAPIDefinition(info = @Info(title = "ChurnPredictor API", version = "1.0",
+@Tag(name = "ECRP API", description = "Customer churn scoring and retention workflow")
+@OpenAPIDefinition(info = @Info(title = "ECRP API", version = "1.0",
         description = "Upload customer data, score churn risk, and work the at-risk list."))
 public class RestApiController {
 

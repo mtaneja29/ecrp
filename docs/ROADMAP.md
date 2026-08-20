@@ -1,4 +1,4 @@
-# ChurnPredictor — Roadmap
+# ECRP — Roadmap
 
 Planned integrations and improvements, beyond the current working proof of concept. Nothing
 in this document is built yet; it describes the intended direction of the project.
