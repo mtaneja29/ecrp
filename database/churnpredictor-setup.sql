@@ -49,5 +49,9 @@ CREATE TABLE prediction_result (
 
     CONSTRAINT fk_prediction_customer
         FOREIGN KEY (customer_id) REFERENCES customer (id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+
+    -- dashboard filters by band then sorts by probability; the "All" tab sorts by probability alone
+    INDEX idx_band_prob (risk_band, churn_probability),
+    INDEX idx_prob (churn_probability)
 );

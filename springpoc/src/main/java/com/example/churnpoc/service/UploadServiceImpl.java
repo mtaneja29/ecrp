@@ -14,11 +14,9 @@ import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.example.churnpoc.dao.CustomerRepository;
-import com.example.churnpoc.dao.PredictionResultRepository;
 import com.example.churnpoc.dto.UploadReceipt;
 import com.example.churnpoc.entity.Customer;
 
@@ -45,25 +43,34 @@ public class UploadServiceImpl implements UploadService {
 
     private static final int MAX_SAMPLE_ERRORS = 5;
 
+    // rows inserted per batch; keep in step with hibernate.jdbc.batch_size
+    private static final int BATCH_SIZE = 1000;
+
     private CustomerRepository customerRepository;
-    private PredictionResultRepository predictionResultRepository;
+    private DataResetService dataResetService;
 
     @Autowired
     public UploadServiceImpl(CustomerRepository theCustomerRepository,
-                             PredictionResultRepository thePredictionResultRepository) {
+                             DataResetService theDataResetService) {
         customerRepository = theCustomerRepository;
-        predictionResultRepository = thePredictionResultRepository;
+        dataResetService = theDataResetService;
     }
 
+    // not @Transactional: rows are inserted batch-by-batch so a multi-million-row upload
+    // never holds one huge transaction. A failure mid-load leaves partial data; re-upload.
     @Override
-    @Transactional  // delete-old + insert-new is all-or-nothing
     public UploadReceipt load(MultipartFile theFile) throws IOException {
 
-        List<Customer> customers = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         Set<String> seenIds = new HashSet<>();
         int received = 0;
+        int loaded = 0;
         int skipped = 0;
+
+        // replace the previous dataset up front (fast TRUNCATE)
+        dataResetService.wipeAll();
+
+        List<Customer> batch = new ArrayList<>(BATCH_SIZE);
 
         try (Reader reader = new InputStreamReader(theFile.getInputStream(), StandardCharsets.UTF_8);
              CSVParser parser = CSVFormat.DEFAULT.builder()
@@ -82,12 +89,12 @@ public class UploadServiceImpl implements UploadService {
 
             for (CSVRecord record : parser) {
                 received++;
+                Customer customer;
                 try {
-                    Customer customer = toCustomer(record);
+                    customer = toCustomer(record);
                     if (!seenIds.add(customer.getExternalId())) {
                         throw new IllegalArgumentException("duplicate customerID");
                     }
-                    customers.add(customer);
                 }
                 catch (Exception exc) {
                     skipped++;
@@ -95,16 +102,25 @@ public class UploadServiceImpl implements UploadService {
                         errors.add("Row " + record.getRecordNumber()
                                 + " (id " + record.get("customerID") + "): " + exc.getMessage());
                     }
+                    continue;
+                }
+
+                batch.add(customer);
+                if (batch.size() >= BATCH_SIZE) {
+                    customerRepository.saveAll(batch);
+                    loaded += batch.size();
+                    batch.clear();
                 }
             }
         }
 
-        // a new upload replaces the previous customer set (predictions go first: FK)
-        predictionResultRepository.deleteAllInBatch();
-        customerRepository.deleteAllInBatch();
-        customerRepository.saveAll(customers);
+        // flush the final partial batch
+        if (!batch.isEmpty()) {
+            customerRepository.saveAll(batch);
+            loaded += batch.size();
+        }
 
-        return new UploadReceipt(received, customers.size(), skipped, errors);
+        return new UploadReceipt(received, loaded, skipped, errors);
     }
 
     private Customer toCustomer(CSVRecord record) {

@@ -9,6 +9,12 @@ spring.datasource.password=CHANGE_ME
 # schema is owned by churnpredictor-setup.sql, Hibernate must not touch it
 spring.jpa.hibernate.ddl-auto=none
 
-# default is 1MB; the Kaggle CSV alone is ~0.95MB
-spring.servlet.multipart.max-file-size=20MB
-spring.servlet.multipart.max-request-size=20MB
+# batch inserts so large uploads/scores are one round-trip per 1000 rows, not per row
+spring.jpa.properties.hibernate.jdbc.batch_size=1000
+spring.jpa.properties.hibernate.order_inserts=true
+spring.jpa.properties.hibernate.order_updates=true
+
+# large CSV uploads (millions of rows); stream to a temp file above 2MB instead of buffering
+spring.servlet.multipart.max-file-size=600MB
+spring.servlet.multipart.max-request-size=600MB
+spring.servlet.multipart.file-size-threshold=2MB

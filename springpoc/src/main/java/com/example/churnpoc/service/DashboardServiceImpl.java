@@ -31,12 +31,15 @@ public class DashboardServiceImpl implements DashboardService {
 
     private CustomerRepository customerRepository;
     private PredictionResultRepository predictionResultRepository;
+    private DataResetService dataResetService;
 
     @Autowired
     public DashboardServiceImpl(CustomerRepository theCustomerRepository,
-                                PredictionResultRepository thePredictionResultRepository) {
+                                PredictionResultRepository thePredictionResultRepository,
+                                DataResetService theDataResetService) {
         customerRepository = theCustomerRepository;
         predictionResultRepository = thePredictionResultRepository;
+        dataResetService = theDataResetService;
     }
 
     @Override
@@ -113,11 +116,8 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    @Transactional
     public void clearAll() {
-        // predictions first: FK references customer
-        predictionResultRepository.deleteAllInBatch();
-        customerRepository.deleteAllInBatch();
+        dataResetService.wipeAll();
     }
 
     private RiskRow toRow(PredictionResult r, Customer c) {
