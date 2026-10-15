@@ -144,7 +144,12 @@ public class UploadServiceImpl implements UploadService {
         customer.setPaperlessBilling(oneOf(record.get("PaperlessBilling"), YES_NO, "PaperlessBilling"));
         customer.setPaymentMethod(oneOf(record.get("PaymentMethod"), PAYMENT_METHODS, "PaymentMethod"));
         customer.setMonthlyCharges(doubleInRange(record.get("MonthlyCharges"), "MonthlyCharges", 0, 500));
-        customer.setTotalCharges(doubleInRange(record.get("TotalCharges"), "TotalCharges", 0, 60000));
+        // a brand-new customer (tenure 0) has no TotalCharges yet; treat blank as 0 rather than
+        // rejecting the row - new customers are the highest-churn group and must be scored
+        String totalCharges = record.get("TotalCharges");
+        customer.setTotalCharges(doubleInRange(
+                totalCharges == null || totalCharges.isBlank() ? "0" : totalCharges,
+                "TotalCharges", 0, 60000));
         return customer;
     }
 
