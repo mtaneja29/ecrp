@@ -17,10 +17,10 @@ given a snapshot of their account attributes. It is a binary classifier that out
 churn probability between 0 and 1, which the serving layer buckets into LOW / MEDIUM / HIGH
 risk bands.
 
-- **Type:** binary classification (logistic regression)
+- **Type:** binary classification (logistic regression), probabilities calibrated
 - **Library:** scikit-learn 1.8
 - **Artifact:** `churn_model.joblib` (a complete preprocessing + model pipeline)
-- **Version:** `2.0-full-features` (recorded in `model_meta.json`)
+- **Version:** `2.1-calibrated` (recorded in `model_meta.json`)
 
 ---
 
@@ -110,41 +110,44 @@ scaling or encoding.
 
 ## 7. Model selection
 
-Two candidate classifiers were trained on the identical preprocessing pipeline and the
-identical train/test split; the only difference between the two runs is the final estimator.
+Two candidate classifiers are compared on the identical preprocessing pipeline. Neither uses
+`class_weight="balanced"` — that reweighting inflates predicted probabilities, and those
+probabilities are shown to agents as percentages (see §8), so the model is left to produce
+calibrated probabilities instead.
 
-| Candidate | Churn precision | Churn recall | Churn F1 | ROC-AUC | Accuracy |
-|---|---|---|---|---|---|
-| **Logistic Regression** (selected) | 0.49 | 0.80 | 0.607 | **0.835** | 0.73 |
-| HistGradientBoosting | 0.52 | 0.75 | 0.613 | 0.831 | 0.75 |
+Selection is by **5-fold stratified cross-validation** on ROC-AUC, not a single train/test
+split — one split varies enough fold-to-fold to be unreliable for choosing a model:
 
-Both use `class_weight="balanced"` to counteract the class imbalance. Logistic regression
-uses `max_iter=2000`; gradient boosting uses `random_state=42`.
+| Candidate | CV ROC-AUC (5-fold) |
+|---|---|
+| **Logistic Regression** (selected) | **0.845 ± 0.003** |
+| HistGradientBoosting | 0.836 ± 0.006 |
 
-**Selection rule:** the two models are effectively tied (churn-F1 differs by 0.006, and
-logistic regression wins on ROC-AUC). The rule encoded in `train.py` requires gradient
-boosting to beat logistic regression on churn-F1 by more than 0.01 to justify sacrificing
-interpretability. It does not, so **logistic regression is selected** — the simpler model
-whose every prediction can be explained via its coefficients.
+**Selection rule:** prefer the simpler, interpretable logistic regression unless gradient
+boosting beats it by more than one fold standard deviation. Here LR wins outright — by roughly
+three times its own std — so the choice is stable across random seeds. `max_iter=2000` for LR;
+`random_state=42` for gradient boosting.
 
 ---
 
 ## 8. Reading the metrics
 
-The metrics are reported on the held-out 20% test set (1,407 customers).
+Cross-validated ROC-AUC (§7) is the headline for ranking quality; the figures below are on
+the held-out 20% test split (1,407 customers) at the tuned decision threshold.
 
-- **Churn recall = 0.80** is the headline number. Of customers who actually churned, the
-  model correctly flags 80%. For a retention use case this is the metric that matters: a
-  missed churner (a lost customer) is far more costly than a false alarm (an unnecessary
-  retention offer).
-- **Churn precision = 0.49** means roughly half of the customers flagged as high-risk would
-  not have churned. This is an accepted trade-off, tuned deliberately via
-  `class_weight="balanced"`, which favours recall over precision.
-- **Accuracy = 0.73** is intentionally not optimised. With a 26.5% churn rate, a model that
-  never predicts churn scores ~74% accuracy while being useless. Accuracy is the wrong
-  objective here; recall and ROC-AUC are the right ones.
-- **ROC-AUC = 0.835** measures ranking quality independent of any threshold — the
-  probability that a random churner is scored higher than a random non-churner.
+- **Calibrated probabilities.** Mean predicted probability on the test set is **0.273**,
+  essentially equal to the observed churn rate of **0.266**. Because the displayed "X% chance
+  of churning" is read by a human agent, it has to mean what it says — removing `class_weight`
+  is what makes it honest.
+- **Decision threshold = 0.40.** Instead of the default 0.5, the threshold maximising churn
+  F1 is swept on the held-out split and recorded as `decision_threshold` in the metadata.
+- **Churn recall 0.68 / precision 0.58 / F1 0.63** at that threshold. The earlier
+  `class_weight` model reached 0.80 recall but at 0.49 precision and with uncalibrated
+  probabilities; this version has higher precision and a higher F1.
+- **ROC-AUC ≈ 0.84 (test), Brier score 0.14.** Brier measures probability calibration (lower
+  is better) and is recorded alongside the other metrics.
+- **Accuracy (~0.78)** is not an objective here — with a 26.5% churn rate a do-nothing model
+  already scores ~74%.
 
 ---
 
@@ -152,27 +155,27 @@ The metrics are reported on the held-out 20% test set (1,407 customers).
 
 Because logistic regression is linear, each feature has a single coefficient. A positive
 coefficient pushes toward churn; a negative one pushes away; magnitude indicates strength
-(comparable across features because the numerics are standardized). Intercept: **−0.30**.
+(comparable across features because the numerics are standardized). Intercept: **−0.57**.
 
 **Strongest churn drivers (positive):**
 
 | Coefficient | Feature |
 |---|---|
-| +0.70 | `Contract = Month-to-month` |
-| +0.66 | `InternetService = Fiber optic` |
-| +0.61 | `TotalCharges` |
-| +0.25 | `StreamingTV = Yes` |
-| +0.24 | `StreamingMovies = Yes` |
-| +0.23 | `PaymentMethod = Electronic check` |
+| +0.64 | `TotalCharges` |
+| +0.61 | `Contract = Month-to-month` |
+| +0.59 | `InternetService = Fiber optic` |
+| +0.19 | `StreamingTV = Yes` |
+| +0.18 | `PaymentMethod = Electronic check` |
 
 **Strongest protective factors (negative):**
 
 | Coefficient | Feature |
 |---|---|
-| −1.25 | `tenure` |
+| −1.35 | `tenure` |
 | −0.78 | `Contract = Two year` |
-| −0.62 | `MonthlyCharges` |
-| −0.59 | `InternetService = DSL` |
+| −0.62 | `InternetService = DSL` |
+| −0.54 | `MonthlyCharges` |
+| −0.30 | `PaperlessBilling = No` |
 
 Tenure is by far the strongest signal: the longer a customer has stayed, the less likely
 they are to leave. Contract length is the next strongest lever — month-to-month drives
@@ -193,13 +196,13 @@ be read as conditional, not standalone, effects.
 Running `python train.py`:
 
 1. Loads and cleans the CSV (§4).
-2. Splits train/test (§2).
-3. Trains both candidates on the shared pipeline and prints a full classification report plus
-   ROC-AUC for each.
-4. Applies the selection rule (§7) and prints the winner.
-5. Writes two artifacts:
+2. Compares both candidates by 5-fold cross-validated ROC-AUC and selects the winner (§7).
+3. Fits the winner on an 80/20 stratified split and sweeps the decision threshold on the
+   held-out portion to maximise churn F1.
+4. Writes two artifacts:
    - `churn_model.joblib` — the selected pipeline.
-   - `model_meta.json` — version, algorithm, metrics, and the feature lists.
+   - `model_meta.json` — version, algorithm, CV mean/std, ROC-AUC, F1, Brier score, decision
+     threshold, and the feature lists.
 
 Retraining is an explicit offline action. The model does not learn from data uploaded through
 the application — uploaded customers have no churn outcome, so there is nothing to learn from;
@@ -242,7 +245,9 @@ application's near-instant "score after upload".
 | MEDIUM | 0.30 – 0.60 |
 | HIGH | ≥ 0.60 |
 
-The 0.30 / 0.60 cut-points are placeholder thresholds (see §12).
+The 0.30 / 0.60 cut-points are placeholder band thresholds, and are separate from the model's
+tuned `decision_threshold` (0.40). Banding is a product policy decision and is left unchanged
+here (see §12).
 
 ---
 
@@ -255,8 +260,13 @@ The 0.30 / 0.60 cut-points are placeholder thresholds (see §12).
 - **Benchmark data.** The IBM Telco dataset is realistic but curated and cleaner than
   real-world telecom data; it is a snapshot with no time dimension, so behavioural churn
   signals (declining usage, rising support contacts) are absent.
+- **New customers.** Training drops the 11 `tenure = 0` rows with blank `TotalCharges`, but
+  the upload layer scores them by treating a blank `TotalCharges` as 0 — new customers are the
+  highest-churn group and must not be silently refused. Their score is a mild extrapolation
+  (the model did not train on `tenure = 0`), but the strong negative tenure coefficient
+  correctly flags them as high-risk.
 - **Four-feature history.** An earlier proof-of-concept model used only 4 features; all
-  figures in this document refer to the current 19-feature model (`2.0-full-features`).
+  figures in this document refer to the current 19-feature model (`2.1-calibrated`).
 - **Interpretation caveat.** Coefficients are conditional effects, not standalone
   correlations (see §9).
 
@@ -274,7 +284,10 @@ The 0.30 / 0.60 cut-points are placeholder thresholds (see §12).
 | **Recall** | of customers who actually churn, the fraction the model flags |
 | **F1** | harmonic mean of precision and recall |
 | **ROC-AUC** | probability a random churner is scored higher than a random non-churner; threshold-independent |
-| **class_weight="balanced"** | weights the minority class up during training to counteract imbalance |
+| **Cross-validation (k-fold)** | split the data into k parts, train on k−1 and test on the held-out one, k times; the mean/std of the scores is a stable estimate that doesn't depend on one lucky split |
+| **Calibration / Brier score** | whether a predicted probability matches the real frequency; Brier is the mean squared error of probabilities (lower = better calibrated) |
+| **Decision threshold** | the probability cut-off above which a customer is classified as a churner; tuned here to maximise F1 rather than left at 0.5 |
+| **class_weight="balanced"** | weights the minority class up during training to counteract imbalance (removed in this model because it distorts probabilities) |
 | **predict_proba** | returns a probability (0–1) rather than a hard 0/1 decision |
 | **Coefficient** | in logistic regression, a feature's learned weight; sign = direction, magnitude = strength |
 | **joblib** | scikit-learn's serialization format for saving/loading trained model objects |

@@ -1,8 +1,13 @@
 {
-  "model_version": "2.0-full-features",
+  "model_version": "2.1-calibrated",
   "algorithm": "logistic_regression",
-  "churn_f1": 0.6069,
-  "roc_auc": 0.8351,
+  "cv_mean": 0.845,
+  "cv_std": 0.0026,
+  "n_folds": 5,
+  "roc_auc": 0.8359,
+  "churn_f1": 0.6275,
+  "brier_score": 0.1401,
+  "decision_threshold": 0.4,
   "numeric_features": [
     "tenure",
     "MonthlyCharges",
